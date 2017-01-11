@@ -8,14 +8,19 @@ package main
 import (
 	"bufio"
 	"flag"
+	"io/ioutil"
 	"log"
 	"net"
+	"os/exec"
+	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 )
 
 var host = flag.String("host", "localhost", "The hostname or IP to connect to; defaults to \"localhost\".")
 var port = flag.Int("port", 8765, "The port to connect to; defaults to 8765.")
+var cmd_dir = flag.String("cmd_dir", "commands", "Path to a directory containing valid command scripts.")
 
 func main() {
 	flag.Parse()
@@ -41,7 +46,16 @@ func main() {
 			text := scanner.Text()
 
 			if len(text) > 0 {
-				log.Printf("Received command: %s.\n", text)
+				switch {
+				case text == "ping":
+					log.Printf("Ping? Pong.")
+
+				case text == "hello":
+					log.Printf("The server said hello. Hello, server.")
+
+				default:
+					go command(text)
+				}
 			}
 
 			if !ok {
@@ -51,10 +65,50 @@ func main() {
 			}
 
 			if scanner.Err() != nil {
-				log.Printf("Error reading from %s.\n", conn.RemoteAddr())
+				log.Printf("!! Error reading from %s.\n", conn.RemoteAddr())
 				log.Print(scanner.Err())
 				break
 			}
 		}
+	}
+}
+
+func scanCommands() map[string]string {
+	var commands = make(map[string]string)
+	
+	files, err := ioutil.ReadDir(*cmd_dir)
+	if err != nil {
+		panic("Could not read the commands directory.")
+	}
+
+	for _, f := range files {
+		ext := filepath.Ext(f.Name())
+		name := f.Name()[0 : len(f.Name())-len(ext)]
+		commands[name] = filepath.Join(*cmd_dir, f.Name())
+	}
+
+	return commands
+}
+
+func command(command string) {
+	commands := scanCommands()
+
+	if script, ok := commands[command]; ok {
+		log.Printf("%s > Executing %s...", command, script)
+
+		out, err := exec.Command(script).Output()
+
+		for _, s := range strings.Split(string(out), "\n") {
+			if len(s) > 0 {
+				log.Printf("%s > %s", command, s)
+			}
+		}
+
+		if err != nil {
+			log.Printf("%s > !! Error running %s: %s", command, script, err)
+		}
+
+	} else {
+		log.Printf("!! Unknown command: %s", command)
 	}
 }
