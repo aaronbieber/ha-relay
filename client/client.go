@@ -8,6 +8,8 @@ package main
 import (
 	"bufio"
 	"flag"
+	"github.com/aaronbieber/ha-relay/config"
+	"github.com/aaronbieber/ha-relay/crypto"
 	"io/ioutil"
 	"log"
 	"net"
@@ -23,7 +25,10 @@ var port = flag.Int("port", 8765, "The port to connect to; defaults to 8765.")
 var cmd_dir = flag.String("cmd_dir", "commands", "Path to a directory containing valid command scripts.")
 
 func main() {
+	conf := config.Conf()
+
 	flag.Parse()
+	key := []byte(conf.Main.Key)
 
 	dest := *host + ":" + strconv.Itoa(*port)
 	log.Printf("Connecting to %s...\n", dest)
@@ -54,7 +59,7 @@ func main() {
 					log.Printf("The server said hello. Hello, server.")
 
 				default:
-					go command(text)
+					go command(text, key)
 				}
 			}
 
@@ -75,7 +80,7 @@ func main() {
 
 func scanCommands() map[string]string {
 	var commands = make(map[string]string)
-	
+
 	files, err := ioutil.ReadDir(*cmd_dir)
 	if err != nil {
 		panic("Could not read the commands directory.")
@@ -90,7 +95,13 @@ func scanCommands() map[string]string {
 	return commands
 }
 
-func command(command string) {
+func command(command string, key []byte) {
+	command, err := crypto.Decrypt(key, command)
+	if err != nil {
+		log.Printf("crypto> !! Error decrypting %s", command)
+		return
+	}
+
 	commands := scanCommands()
 
 	if script, ok := commands[command]; ok {

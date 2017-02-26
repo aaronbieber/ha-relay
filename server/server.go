@@ -8,6 +8,8 @@ package main
 import (
 	"bufio"
 	"flag"
+	"github.com/aaronbieber/ha-relay/config"
+	"github.com/aaronbieber/ha-relay/crypto"
 	"log"
 	"net"
 	"os"
@@ -33,11 +35,16 @@ func main() {
 	// Consume command line switches.
 	var addr = flag.String("addr", "", "The address to listen to; default is \"\" (all interfaces).")
 	var port = flag.Int("port", 8765, "The port to listen on; default is 8765.")
-	var pipeflag = flag.String("pipe", "~/conduit", "A named pipe to listen on for external commands; default is ~/conduit.")
+	var pipeflag = flag.String("pipe", "./conduit", "A named pipe to listen on for external commands; default is ./conduit.")
 	flag.Parse()
+
+	conf := config.Conf()
+	key := []byte(conf.Main.Key)
 
 	// Argument sanity check.
 	pipef, _ := filepath.Abs(*pipeflag)
+
+	log.Printf(pipef)
 
 	pipeExists, _ := fileExists(pipef)
 	if !pipeExists {
@@ -149,6 +156,12 @@ func main() {
 		select {
 		case cmd := <-cmd_queue:
 			log.Printf("Command: %s", cmd)
+
+			cmd, err = crypto.Encrypt(key, cmd)
+			if err != nil {
+				log.Printf("Error encrypting command %s", cmd)
+				continue
+			}
 
 			if (len(clients)) > 0 {
 				log.Printf("Writing to %d client(s).\n", len(clients))
